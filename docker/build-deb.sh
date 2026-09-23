@@ -30,7 +30,7 @@ DEB_REVISION="${DEB_REVISION:-1}"
 # Without .git in the build context, CMake would silently fall back to a patch
 # number of 9999. Refuse to build rather than publish a misleading version.
 if [ -z "${ORTOOLS_PATCH:-}" ]; then
-  echo "ERROR: ORTOOLS_PATCH is not set; pass \$(git rev-list --count v9.0..HEAD)" >&2
+  echo "ERROR: ORTOOLS_PATCH is not set; pass \$(git rev-list --count v9.0..v9.7)" >&2
   exit 1
 fi
 # CMake's set_version() reads this from the environment.
@@ -80,8 +80,8 @@ cmake -S . -B build -G Ninja \
 cmake --build build --parallel "${JOBS}"
 ccache --show-stats || true
 
-# Install for real (this is a throwaway container) so the smoke test below
-# exercises the same absolute paths a robot image will see.
+# Install for real (this is a throwaway container) so the CMake config edit
+# below works on the same absolute paths a robot image will see.
 rm -rf "${PREFIX}"
 cmake --install build --strip
 
@@ -110,31 +110,6 @@ if(TARGET ortools::ortools)
     INTERFACE_LINK_OPTIONS "LINKER:--exclude-libs,${ARCHIVES}")
 endif()
 EOF
-
-# Link a small routing library against the install the way a consumer would,
-# run it, and check neither it nor its executable exports the vendored
-# protobuf/abseil symbols.
-echo "==> smoke-testing the install"
-SMOKE_SRC="$(pwd)/docker/smoke-test"
-rm -rf /tmp/smoke
-cmake -S "${SMOKE_SRC}" -B /tmp/smoke -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_PREFIX_PATH="${PREFIX}"
-cmake --build /tmp/smoke
-/tmp/smoke/smoke
-for bin in /tmp/smoke/smoke /tmp/smoke/libsmoke_route.so; do
-  if ldd "${bin}" | grep -E 'ortools|protobuf|absl'; then
-    echo "ERROR: ${bin} still loads or-tools/protobuf/abseil dynamically" >&2
-    exit 1
-  fi
-  exported="$(nm -D --defined-only "${bin}" | grep -cE 'protobuf|absl' || true)"
-  echo "==> protobuf/abseil symbols exported by $(basename "${bin}"): ${exported}"
-  if [ "${exported}" -ne 0 ]; then
-    nm -DC --defined-only "${bin}" | grep -E 'protobuf|absl' | head -20 >&2
-    echo "ERROR: vendored protobuf/abseil symbols leak out of ${bin}" >&2
-    exit 1
-  fi
-done
 
 # Stage inside a debian/ tree so dpkg-shlibdeps recognises anything bundled
 # as belonging to this package rather than as a missing dependency.

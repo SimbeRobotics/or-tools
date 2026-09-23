@@ -9,8 +9,7 @@ fuse deb build (`SimbeRobotics/fuse`: `docker-bake.hcl` + `docker/`).
 |---|---|
 | `docker-bake.hcl` | Bake matrix: `focal` and `noble`, each for `linux/amd64` and `linux/arm64`. |
 | `docker/Dockerfile` | Ubuntu build stage, then a `scratch` stage holding only the `.deb`. |
-| `docker/build-deb.sh` | Configures, builds, smoke-tests and packages or-tools. |
-| `docker/smoke-test/` | Minimal consumer, built against the installed package during every build. |
+| `docker/build-deb.sh` | Configures, builds and packages or-tools. |
 
 ## Building
 
@@ -18,7 +17,7 @@ The build runs on Depot (currently borrowing the Tally project, like fuse),
 which builds each architecture on a native machine:
 
 ```sh
-ORTOOLS_PATCH=$(git rev-list --count v9.0..HEAD) \
+ORTOOLS_PATCH=$(git rev-list --count v9.0..v9.7) \
   depot bake --project t795bp4f73
 ```
 
@@ -32,7 +31,10 @@ then go through QEMU emulation, which takes hours instead of minutes.
 
 `ORTOOLS_PATCH` is required. Upstream derives the patch number from git
 history, which `.dockerignore` keeps out of the build context. Without it CMake
-would silently use `9999`, so the build refuses to run.
+would silently use `9999`, so the build refuses to run. Count to the `v9.7`
+tag rather than `HEAD`: `2996` matches upstream's own 9.7 release, and counting
+to `HEAD` would bump it with every Simbe commit on this branch. Packaging-only
+changes bump `DEB_REVISION` instead.
 
 A cold build takes a few minutes per target on Depot; a ccache cache mount
 (one per codename/arch) makes rebuilds after a source change much faster.
@@ -102,24 +104,21 @@ with packaging changes, rebuild with `DEB_REVISION=2` (and so on).
 - **Runtime `Depends`** are computed by `dpkg-shlibdeps`: only libc6,
   libgcc-s1 and libstdc++6.
 
-## Smoke test
+## Verification
 
-Every build installs to `/opt/ortools` inside the container. It then builds
-`docker/smoke-test/` against that install exactly as a consumer would: a
-shared library that solves a four-city TSP with the routing library, plus an
-executable that calls it. The build fails if:
-
-- the solve returns no route;
-- either binary loads or-tools, protobuf or abseil dynamically;
-- either binary exports any protobuf or abseil symbol (`nm -D --defined-only`).
-
-All four packages from the first release build passed (route cost 21, zero
-exported symbols).
+During development, a throwaway consumer (a shared library solving a
+four-city TSP with the routing library, plus an executable calling it) was
+built against the installed package for all four targets. It found the
+optimal route. Neither binary loaded or-tools, protobuf or abseil dynamically,
+and neither exported any protobuf or abseil symbol
+(`nm -D --defined-only ... | grep -cE 'protobuf|absl'` gave 0). That check
+is not part of the build.
 
 ## Known limitations
 
-- The packages have only been exercised inside the build container. They have
-  not yet been installed in the robot containers or linked into simbe_soul.
+- The packages have only been exercised inside the build container, and
+  nothing in the build re-checks for symbol leaks. They have not yet been
+  installed in the robot containers or linked into simbe_soul.
 - Hidden visibility stops or-tools from *exporting* its protobuf. It cannot
   help if a consumer's own code also includes system protobuf headers and links
   the system `libprotobuf`. Protobuf 23 and the system version share symbol

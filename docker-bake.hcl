@@ -5,7 +5,7 @@
 # normally derived from git history, which isn't in the build context, so it
 # has to be passed in:
 #
-#   ORTOOLS_PATCH=$(git rev-list --count v9.0..HEAD) \
+#   ORTOOLS_PATCH=$(git rev-list --count v9.0..v9.7) \
 #     depot bake --project t795bp4f73
 #
 # builds every release/arch combination; name one (e.g. ortools-deb-noble) to
