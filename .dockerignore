@@ -62,3 +62,6 @@ temp_*/
 # Editor directories and files
 *.user
 *.swp
+
+# Simbe deb build output (docker-bake.hcl)
+output/

@@ -102,3 +102,6 @@ CMakeFiles
 DartConfiguration.tcl
 *build*/*
 build/
+
+# Simbe deb build output (docker-bake.hcl)
+output/
